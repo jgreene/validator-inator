@@ -8,7 +8,7 @@ import { PathReporter } from 'io-ts/lib/PathReporter'
 
 (moment as any).suppressDeprecationWarnings = true;
 
-import { register, validate, required, getRequiredFieldsFor } from './index'
+import { register, validate, isValid, required, getRequiredFieldsFor, isValidationArray } from './index'
 
 const PersonAddressType = t.type({
     StreetAddress1: t.string,
@@ -56,6 +56,15 @@ register<PersonAddress>(PersonAddress, {
     StreetAddress1: required("StreetAddress1 is required"),
     StreetAddress2: required("StreetAddress2 is required"),
 });
+
+function getValidPerson() {
+    return new Person({ FirstName: 'Test', LastName: 'TestLast', 
+    Address: new PersonAddress({ StreetAddress1: '123 Test St', StreetAddress2: 'Test'}),
+    Addresses:[
+        new PersonAddress({ StreetAddress1: 'Test', StreetAddress2: 'Test'})
+    ]
+});
+}
 
 describe('Can validate Person', () => {
 
@@ -206,5 +215,30 @@ describe('Can validate Person', () => {
         if(decodeResult.isLeft()){
             console.log(PathReporter.report(decodeResult));
         }
-    })
+    });
+
+    it('Valid person results in valid validation result', async () => {
+        const person = getValidPerson();
+        const result = await validate(person);
+        
+        const valid = isValid(result);
+        expect(valid).eq(true);
+    });
+
+    it('isValidationArray correctly detects a ValidationArray<T>', async () => {
+        const person = getValidPerson();
+        const result = await validate(person);
+
+        let x = isValidationArray(result.Addresses);
+        expect(x).eq(true);
+    });
+
+    it('Invalid address results in invalid validation result', async () => {
+        const person = getValidPerson();
+        person.Address.StreetAddress1 = '';
+        const result = await validate(person);
+        
+        const valid = isValid(result);
+        expect(valid).eq(false);
+    });
 });

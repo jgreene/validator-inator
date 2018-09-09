@@ -176,9 +176,12 @@ type ValidationArray<T> = Array<T> & {
     errors: string[]
 }
 
+export function isValidationArray<T>(input: any): input is ValidationArray<T> {
+    return Array.isArray(input) && Array.isArray((input as any).errors);
+}
+
 export type ValidationResult<T> = {
     [P in keyof T]: T[P] extends primitive ? string[] :
-                    T[P] extends moment.Moment ? string[] :
                     T[P] extends Array<infer U> ? ValidationArray<ValidationResult<U>> :
                     ValidationResult<T[P]>;
 }
@@ -190,6 +193,42 @@ function isInValidationPath(currentPath: string, validationPath: string | null):
     }
 
     return validationPath.startsWith(currentPath);
+}
+
+export function isValid<T>(result: ValidationResult<T>): boolean {
+    var res = true;
+    for(var p in result){
+        const prop: any = result[p];
+        const isArray = Array.isArray(prop)
+        const keys = isArray ? [] : Object.keys(prop);
+        if(isArray){
+            if(isValidationArray<T>(prop)){
+                if(prop.errors.length > 0){
+                    return false;
+                }
+
+                for(var i = 0; i < prop.length; i++){
+                    const entry = prop[i];
+                    if(!isValid(entry))
+                    {
+                        return false;
+                    }
+                }
+            }
+            else if(prop.length > 0)
+            {
+                return false;
+            }
+        }
+        else if(keys.length > 0){
+            if(!isValid(prop))
+            {
+                return false;
+            }
+        }
+    }
+
+    return res;
 }
 
 export async function validate<T extends tdc.ITyped<any>>(model: T, validationPath: string | null = null, path: string = '.'): Promise<ValidationResult<T>> {
@@ -221,7 +260,7 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, validationPa
 
         current.errors.push(res);
         result[key] = current;
-    }
+    };
 
     const validators = getValidatorsFor<T>(target);
 
