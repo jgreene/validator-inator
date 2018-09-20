@@ -298,7 +298,9 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, validationPa
         const tagContains = (search: string) => tag && tag.length > 0 ? tag.indexOf(search) != -1 : false;
         const propValue = (model as any)[key];
         const current = result[key];
-        if(tag === "InterfaceType"){
+        const isArray = Array.isArray(propValue);
+        
+        if(tag === "InterfaceType" || (!isArray && !isPrimitive(propValue) && Object.keys(propValue).length > 0)){
             const innerResult = await validate(propValue, validationPath, path + key + '.');
             
             if(current){

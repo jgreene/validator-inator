@@ -26,6 +26,7 @@ const PersonType = t.type({
     Address: m.ref(PersonAddress),
     Addresses: t.array(m.ref(PersonAddress)),
     SecondaryAddresses: t.array(m.ref(PersonAddress)),
+    NullableAddress: t.union([m.ref(PersonAddress), t.null]),
     Birthdate: t.union([m.DateTime, t.null])
 })
 
@@ -236,6 +237,17 @@ describe('Can validate Person', () => {
     it('Invalid address results in invalid validation result', async () => {
         const person = getValidPerson();
         person.Address.StreetAddress1 = '';
+        const result = await validate(person);
+        
+        const valid = isValid(result);
+        expect(valid).eq(false);
+    });
+
+    it('Can validate nullable address', async () => {
+        const person = getValidPerson();
+
+        person.NullableAddress = new PersonAddress();
+
         const result = await validate(person);
         
         const valid = isValid(result);
