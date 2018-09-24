@@ -231,6 +231,19 @@ export function isValid<T>(result: ValidationResult<T>): boolean {
     return res;
 }
 
+function hasKey(input: any, key: string) {
+    if(isPrimitive(input))
+    {
+        return false;
+    }
+
+    if(key in input){
+        return true;
+    }
+
+    return false;
+}
+
 export async function validate<T extends tdc.ITyped<any>>(model: T, originalModel: T | undefined = undefined, validationPath: string | null = null, path: string = '.'): Promise<ValidationResult<T>> {
     const result: any = {};
     if(isPrimitive(model)){
@@ -298,7 +311,7 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
         const tag = (prop as any)['_tag'];
         const tagContains = (search: string) => tag && tag.length > 0 ? tag.indexOf(search) != -1 : false;
         const propValue = (model as any)[key];
-        const originalValue = originalModel !== undefined ? (originalModel as any)[key] : undefined;
+        const originalValue = hasKey(originalModel, key) ? (originalModel as any)[key] : undefined;
         const current = result[key];
         const isArray = Array.isArray(propValue);
         
