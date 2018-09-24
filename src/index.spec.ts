@@ -54,6 +54,7 @@ register<Person>(Person, {
 
         return null;
     },
+    NullableAddress: (p) => p.NullableAddress != null && p.NullableAddress.StreetAddress1 === 'Test NullableAddress1' ? 'Bad nullable address' : null
 });
 
 register<PersonAddress>(PersonAddress, {
@@ -63,11 +64,11 @@ register<PersonAddress>(PersonAddress, {
 
 function getValidPerson() {
     return new Person({ FirstName: 'Test', LastName: 'TestLast', 
-    Address: new PersonAddress({ StreetAddress1: '123 Test St', StreetAddress2: 'Test'}),
-    Addresses:[
-        new PersonAddress({ StreetAddress1: 'Test', StreetAddress2: 'Test'})
-    ]
-});
+        Address: new PersonAddress({ StreetAddress1: '123 Test St', StreetAddress2: 'Test'}),
+        Addresses:[
+            new PersonAddress({ StreetAddress1: 'Test', StreetAddress2: 'Test'})
+        ]
+    });
 }
 
 describe('Can validate Person', () => {
@@ -253,6 +254,7 @@ describe('Can validate Person', () => {
 
         const result = await validate(person);
         
+        
         const valid = isValid(result);
         expect(valid).eq(false);
     });
@@ -266,6 +268,15 @@ describe('Can validate Person', () => {
 
         const valid = isValid(result);
         expect(valid).eq(false);
-        
-    })
+    });
+
+    it('Bad NullableAddress does not return array of strings', async () => {
+        const person = getValidPerson();
+        person.NullableAddress = new PersonAddress();
+        person.NullableAddress.StreetAddress1 = 'Test NullableAddress1';
+
+        const result = await validate(person);
+
+        expect(result.NullableAddress).does.not.have.property('length')
+    });
 });
