@@ -34,7 +34,10 @@ class Person extends m.DeriveClass(PersonType) {}
 
 
 register<Person>(Person, {
-    FirstName: required('FirstName is required'),
+    FirstName: [
+        required('FirstName is required'),
+        (p, original) => original !== undefined && original.FirstName === 'Test' && p.FirstName === 'new FirstName' ? 'original FirstName error' : null
+    ],
     LastName: (p) => new Promise<string | null>(resolve => {
         setTimeout(() => {
             resolve((p.LastName == null || p.LastName.length < 1 ? "LastName is required" : null))
@@ -50,7 +53,7 @@ register<Person>(Person, {
             return "First StreetAddress1 must equal Test";
 
         return null;
-    }
+    },
 });
 
 register<PersonAddress>(PersonAddress, {
@@ -151,7 +154,7 @@ describe('Can validate Person', () => {
 
     it('Use of validationPath only validates the given path', async () => {
         const person = new Person();
-        const result = await validate(person, '.Address.StreetAddress2');
+        const result = await validate(person, undefined, '.Address.StreetAddress2');
         
         expect(result).to.have.property("Address");
         expect(result.FirstName).eq(undefined);
@@ -164,7 +167,7 @@ describe('Can validate Person', () => {
         const person = new Person();
         person.SecondaryAddresses.push(new PersonAddress());
         person.SecondaryAddresses.push(new PersonAddress());
-        const result = await validate(person, '.SecondaryAddresses[0].StreetAddress1');
+        const result = await validate(person, undefined, '.SecondaryAddresses[0].StreetAddress1');
         expect(result).to.have.property("SecondaryAddresses");
         expect(result.SecondaryAddresses).length(person.SecondaryAddresses.length);
         expect(result.SecondaryAddresses.errors).length(1);
@@ -253,4 +256,16 @@ describe('Can validate Person', () => {
         const valid = isValid(result);
         expect(valid).eq(false);
     });
+
+    it('Can validate against original model', async () => {
+        const person = getValidPerson();
+        const originalPerson = new Person(JSON.parse(JSON.stringify(person)));
+        person.FirstName = "new FirstName";
+
+        const result = await validate(person, originalPerson);
+
+        const valid = isValid(result);
+        expect(valid).eq(false);
+        
+    })
 });

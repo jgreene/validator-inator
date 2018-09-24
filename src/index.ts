@@ -22,7 +22,7 @@ type ValidatorResult = string | null | Promise<string | null>;
 const VALIDATION_METADATA_KEY = "VALIDATION_METADATA_KEY";
 
 interface IValidator<T> {
-    (model: T): ValidatorResult;
+    (model: T, originalModel?: T): ValidatorResult;
 }
 
 export abstract class FieldValidator {
@@ -231,7 +231,7 @@ export function isValid<T>(result: ValidationResult<T>): boolean {
     return res;
 }
 
-export async function validate<T extends tdc.ITyped<any>>(model: T, validationPath: string | null = null, path: string = '.'): Promise<ValidationResult<T>> {
+export async function validate<T extends tdc.ITyped<any>>(model: T, originalModel: T | undefined = undefined, validationPath: string | null = null, path: string = '.'): Promise<ValidationResult<T>> {
     const result: any = {};
     if(isPrimitive(model)){
         return result;
@@ -274,13 +274,14 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, validationPa
         const propValidators = validators[key] as Array<FieldValidator | IValidator<T>>;
         for(var i = 0; i < propValidators.length; i++){
             const v = propValidators[i];
-            var res = isFieldValidator(v) ? v.validate(model[key]) : v(model);
+            var res = isFieldValidator(v) ? v.validate(propValue) : v(model, originalModel);
             if(res instanceof Promise){
                 res = await res;
             }
             if(isArray){
                 addToArray(key, res);
-            }else {
+            }
+            else {
                 add(key, res);
             }
         }
@@ -297,11 +298,12 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, validationPa
         const tag = (prop as any)['_tag'];
         const tagContains = (search: string) => tag && tag.length > 0 ? tag.indexOf(search) != -1 : false;
         const propValue = (model as any)[key];
+        const originalValue = originalModel !== undefined ? (originalModel as any)[key] : undefined;
         const current = result[key];
         const isArray = Array.isArray(propValue);
         
         if(tag === "InterfaceType" || (!isArray && !isPrimitive(propValue) && Object.keys(propValue).length > 0)){
-            const innerResult = await validate(propValue, validationPath, path + key + '.');
+            const innerResult = await validate(propValue, originalValue, validationPath, path + key + '.');
             
             if(current){
                 if(Object.keys(innerResult).length > 0){
@@ -317,7 +319,8 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, validationPa
             var arrayRes: any = result[key] || [];
             for(var k = 0; k < propValue.length; k++){
                 const item = propValue[k];
-                const innerResult = await validate(item, validationPath, path + key + '[' + k + ']' + '.');
+                const originalItem = originalValue !== undefined && originalValue.length > k ? originalValue[k] : undefined;
+                const innerResult = await validate(item, originalItem, validationPath, path + key + '[' + k + ']' + '.');
                 arrayRes.push(innerResult);
             }
             
