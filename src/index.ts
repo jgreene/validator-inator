@@ -19,10 +19,20 @@ function isPrimitive(input: any): input is primitive {
 
 type ValidatorResult = string | null | Promise<string | null>;
 
+type GenericValidatorResult<T> = {
+    [P in keyof T]?:  T[P] extends primitive ? ValidatorResult
+                    : T[P] extends Array<infer U> ? ValidatorResult
+                    : never;
+}
+
 const VALIDATION_METADATA_KEY = "VALIDATION_METADATA_KEY";
 
 interface IValidator<T> {
-    (model: T, originalModel?: T): ValidatorResult;
+    (model: T, originalModel?: T): ValidatorResult | GenericValidatorResult<T>;
+}
+
+interface IGenericValidator<T> {
+    (model: T, originalModel?: T): GenericValidatorResult<T>;
 }
 
 export abstract class FieldValidator {
@@ -35,7 +45,9 @@ function isFieldValidator(input: any): input is FieldValidator {
 }
 
 type ValidationModel<T> = {
-    [P in keyof T]?: FieldValidator | IValidator<T> | Array<FieldValidator | IValidator<T>>;
+    [P in keyof T]?:   T[P] extends primitive ? FieldValidator | IValidator<T> | Array<FieldValidator | IValidator<T>>
+                     : T[P] extends Array<infer U> ? FieldValidator | IValidator<T> | Array<FieldValidator | IValidator<T>>
+                     : IGenericValidator<T> | Array<IGenericValidator<T>>;
 }
 
 type ValidatorEntryProps<T> = {
@@ -155,10 +167,11 @@ export function register<T>(
 ): void  {
     const currentMap: any = getValidatorsFor<T>(klass);
     for(const prop in map) {
-        const currentValidators = (currentMap[prop] || []) as Array<FieldValidator | IValidator<T>>;
+        const currentValidators = (currentMap[prop] || []) as Array<FieldValidator | IValidator<T> | IGenericValidator<T>>;
         const mapped = map[prop];
         if(mapped instanceof Array){
-            mapped.forEach(m => {
+            let m = mapped as any[];
+            m.forEach(m => {
                 currentValidators.push(m);
             });
         }
@@ -270,26 +283,56 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
     var target = model as any;
     target = target.prototype === undefined ? target.constructor : target;
     
-    const add = (key: string, res: string | null) => {
-        if(res === null)
+    function add(key: string, res: string | null | GenericValidatorResult<T>){
+        if(isRecord(res)){
+            const r = res as any;
+            for(var k in r){
+                add(k, r[k]);
+            }
             return;
+        }
+
         var current = result[key] || [];
-        current.push(res);
+        if(res !== null){
+            current.push(res);
+        }
+        
         result[key] = current;
     };
 
-    const addToArray = (key: string, res: string | null) => {
+    const addToArray = (key: string, res: string | null | GenericValidatorResult<T>) => {
         if(res === null)
             return;
-        
-        var current: any = result[key] || [];
-        if(!current.errors)
-        {
-            current.errors = [];
+
+        function innerAdd(key: string, res: string | null) {
+            var current: any = result[key] || [];
+            if(!current.errors)
+            {
+                current.errors = [];
+            }
+
+            current.errors.push(res);
+            result[key] = current;
         }
 
-        current.errors.push(res);
-        result[key] = current;
+        if(isRecord(res)) {
+            const r = res as any;
+            for(var k in r){
+                if(k === key){
+                    innerAdd(key, r);
+                    return;
+                }
+
+                const isArray = Array.isArray((model as any)[k]);
+                if(isArray){
+                    addToArray(k, r[k]);
+                }
+                add(k, r[k]);
+            }
+            return;
+        }
+        
+        innerAdd(key, res as any);
     };
 
     const validators = getValidatorsFor<T>(target);
@@ -312,6 +355,9 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
                 addToArray(key, res);
             }
             else if(isPrimitive(propValue)) {
+                add(key, res);
+            }
+            else if(isRecord(res)) {
                 add(key, res);
             }
         }

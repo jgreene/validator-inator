@@ -36,7 +36,8 @@ class Person extends m.DeriveClass(PersonType) {}
 register<Person>(Person, {
     FirstName: [
         required('FirstName is required'),
-        (p, original) => original !== undefined && original.FirstName === 'Test' && p.FirstName === 'new FirstName' ? 'original FirstName error' : null
+        (p, original) => original !== undefined && original.FirstName === 'Test' && p.FirstName === 'new FirstName' ? 'original FirstName error' : null,
+        (p) => p.FirstName === "Separate field" ? { Birthdate: "Separate field error" } : null
     ],
     LastName: (p) => new Promise<string | null>(resolve => {
         setTimeout(() => {
@@ -44,17 +45,20 @@ register<Person>(Person, {
         }, 1);
     }),
     Addresses: (p) => p.Addresses == null || p.Addresses.length < 1 ? "Must have at least one address" : null,
-    SecondaryAddresses: (p) => { 
-        if(!p.SecondaryAddresses || p.SecondaryAddresses.length < 1)
+    SecondaryAddresses: [
+        (p) => { 
+            if(!p.SecondaryAddresses || p.SecondaryAddresses.length < 1)
+                return null;
+
+            var first = p.SecondaryAddresses[0];
+            if(first.StreetAddress1 !== "Test")
+                return "First StreetAddress1 must equal Test";
+
             return null;
-
-        var first = p.SecondaryAddresses[0];
-        if(first.StreetAddress1 !== "Test")
-            return "First StreetAddress1 must equal Test";
-
-        return null;
-    },
-    NullableAddress: (p) => p.NullableAddress != null && p.NullableAddress.StreetAddress1 === 'Test NullableAddress1' ? 'Bad nullable address' : null
+        },
+        (p) => p.FirstName === 'Separate Array Field' ? { Addresses: 'Separate address array validated by first name' } : null
+    ],
+    NullableAddress: (p) => { return { FirstName: p.FirstName === 'Separate Nullable Field' ? 'Separate field against nullable address' : null }; } 
 });
 
 register<PersonAddress>(PersonAddress, {
@@ -279,4 +283,43 @@ describe('Can validate Person', () => {
 
         expect(result.NullableAddress).does.not.have.property('length')
     });
+
+    it('Can register validator that displays error in separate field', async () => {
+        const person = getValidPerson();
+        person.FirstName = 'Separate field';
+
+        const result = await validate(person);
+
+        const valid = isValid(result);
+        expect(valid).eq(false);
+
+        expect(result.Birthdate.length).eq(1);
+    });
+
+    it('Can register validator that displays error in separate field on array field', async () => {
+        const person = getValidPerson();
+        person.FirstName = 'Separate Array Field';
+
+        const result = await validate(person);
+
+        const valid = isValid(result);
+        expect(valid).eq(false);
+
+        expect(result.Addresses.errors.length).eq(1);
+    });
+
+    it('Partial validation against separate field validator returns separate field', async () => {
+        const person = getValidPerson();
+        person.FirstName = 'Separate Nullable Field';
+
+        var result = await validate(person, undefined, '.NullableAddress.StreetAddress1');
+        expect(result.FirstName.length).eq(1);
+
+        person.FirstName = 'Will not trigger Separate Nullable Field';
+
+        result = await validate(person, undefined, '.NullableAddress.StreetAddress1');
+
+        expect(result).has.property('FirstName');
+        expect(result.FirstName.length).eq(0);
+    })
 });
