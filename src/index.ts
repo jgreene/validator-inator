@@ -293,7 +293,7 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
         }
 
         var current = result[key] || [];
-        if(res !== null){
+        if(res !== null && current.indexOf(res) === -1){
             current.push(res);
         }
         
@@ -311,7 +311,10 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
                 current.errors = [];
             }
 
-            current.errors.push(res);
+            if(res !== null && current.indexOf(res) === -1){
+                current.errors.push(res);
+            }
+            
             result[key] = current;
         }
 
