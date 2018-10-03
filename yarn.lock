@@ -132,9 +132,9 @@ inherits@2:
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/inherits/-/inherits-2.0.3.tgz#633c2c83e3da42a502f52466022480f4208261de"
 
-io-ts-derive-class@^0.0.17:
-  version "0.0.17"
-  resolved "https://registry.yarnpkg.com/io-ts-derive-class/-/io-ts-derive-class-0.0.17.tgz#a124c2e4af56811e74502d9aeea96f04ebfa69df"
+io-ts-derive-class@^0.0.19:
+  version "0.0.19"
+  resolved "https://registry.yarnpkg.com/io-ts-derive-class/-/io-ts-derive-class-0.0.19.tgz#3b7805938cb1c1069c116617cf7e7da084570b42"
   dependencies:
     io-ts "^1.3.0"
     moment "^2.22.2"
