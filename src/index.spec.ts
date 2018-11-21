@@ -102,7 +102,7 @@ describe('Can validate Person', () => {
     it('Address StreetAddress1 is required', async () => {
         const person = new Person();
         const result = await validate(person);
-        
+
         expect(result).to.have.property("Address");
         expect(result.Address.StreetAddress1).length(1);
         expect(result.Address.StreetAddress1[0]).eq("StreetAddress1 is required");
@@ -257,7 +257,7 @@ describe('Can validate Person', () => {
         person.NullableAddress = new PersonAddress();
 
         const result = await validate(person);
-        
+        expect(result.NullableAddress!.StreetAddress1.length).eq(1)
         
         const valid = isValid(result);
         expect(valid).eq(false);

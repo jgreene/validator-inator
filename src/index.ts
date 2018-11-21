@@ -257,6 +257,22 @@ function hasKey(input: any, key: string) {
     return false;
 }
 
+function isTypedRecord(input: any): boolean {
+    if(isPrimitive(input)){
+        return false;
+    }
+
+    if(Array.isArray(input)){
+        return false;
+    }
+
+    if(input.getType){
+        return true
+    }
+
+    return false;
+}
+
 function isRecord(input: any): boolean {
     if(isPrimitive(input)){
         return false;
@@ -274,7 +290,13 @@ function isRecord(input: any): boolean {
     return false;
 }
 
-export async function validate<T extends tdc.ITyped<any>>(model: T, originalModel: T | undefined = undefined, validationPath: string | null = null, path: string = '.'): Promise<ValidationResult<T>> {
+export async function validate<T extends tdc.ITyped<any>>(
+    model: T, 
+    originalModel: T | undefined = undefined, 
+    validationPath: string | null = null, 
+    path: string = '.'
+    ): Promise<ValidationResult<T>> {
+
     const result: any = {};
     if(isPrimitive(model)){
         return result;
@@ -360,10 +382,14 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
             else if(isPrimitive(propValue)) {
                 add(key, res);
             }
-            else if(isRecord(res)) {
+            else if(isTypedRecord(res) || isRecord(res)) {
                 add(key, res);
             }
         }
+    }
+
+    if(!model.getType) {
+        return result;
     }
 
     const type = model.getType();
@@ -380,7 +406,7 @@ export async function validate<T extends tdc.ITyped<any>>(model: T, originalMode
         const originalValue = hasKey(originalModel, key) ? (originalModel as any)[key] : undefined;
         const current = result[key];
         
-        if(tag === "InterfaceType" || isRecord(propValue)){
+        if(tag === "InterfaceType" || isTypedRecord(propValue)){
             const innerResult = await validate(propValue, originalValue, validationPath, path + key + '.');
             
             if(current){
