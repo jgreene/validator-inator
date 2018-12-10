@@ -8,7 +8,29 @@ import { PathReporter } from 'io-ts/lib/PathReporter'
 
 (moment as any).suppressDeprecationWarnings = true;
 
-import { register, validate, isValid, required, getRequiredFieldsFor, isValidationArray } from './index'
+import { ValidationRegistry, ValidationModel, isValid, required, isValidationArray } from './index'
+
+type TestValidationContext = {
+    isTest: boolean
+}
+
+const registry = new ValidationRegistry<TestValidationContext>();
+function register<T>(
+    klass: new (...args: any[]) => T,
+    map: ValidationModel<T, TestValidationContext>
+): void {
+    registry.register(klass, map);
+}
+const testCtx = { isTest: true }
+
+async function validate<T extends m.ITyped<any>>(
+    model: T, 
+    originalModel: T | undefined = undefined, 
+    validationPath: string | null = null, 
+    path: string = '.'
+) {
+    return registry.validate(model, testCtx, originalModel, validationPath, path);
+}
 
 const PersonAddressType = t.type({
     StreetAddress1: t.string,
@@ -36,7 +58,7 @@ class Person extends m.DeriveClass(PersonType) {}
 register<Person>(Person, {
     FirstName: [
         required('FirstName is required'),
-        (p, original) => original !== undefined && original.FirstName === 'Test' && p.FirstName === 'new FirstName' ? 'original FirstName error' : null,
+        (p, ctx, original) => original !== undefined && original.FirstName === 'Test' && p.FirstName === 'new FirstName' ? 'original FirstName error' : null,
         (p) => p.FirstName === "Separate field" ? { Birthdate: "Separate field error" } : null
     ],
     LastName: (p) => new Promise<string | null>(resolve => {
@@ -190,7 +212,7 @@ describe('Can validate Person', () => {
     });
 
     it('Can get required fields map for person', async () => {
-        const fields = getRequiredFieldsFor(Person);
+        const fields = registry.getRequiredFieldsFor(Person);
         
         expect(fields.FirstName).eq(true);
         expect(fields.LastName).eq(false);

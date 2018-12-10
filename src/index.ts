@@ -25,14 +25,12 @@ type GenericValidatorResult<T> = {
                     : never;
 }
 
-const VALIDATION_METADATA_KEY = "VALIDATION_METADATA_KEY";
-
-interface IValidator<T> {
-    (model: T, originalModel?: T): ValidatorResult | GenericValidatorResult<T>;
+interface IValidator<T, Ctx> {
+    (model: T, ctx: Ctx, originalModel?: T): ValidatorResult | GenericValidatorResult<T>;
 }
 
-interface IGenericValidator<T> {
-    (model: T, originalModel?: T): GenericValidatorResult<T>;
+interface IGenericValidator<T, Ctx> {
+    (model: T, ctx: Ctx,  originalModel?: T): GenericValidatorResult<T>;
 }
 
 export abstract class FieldValidator {
@@ -44,42 +42,18 @@ function isFieldValidator(input: any): input is FieldValidator {
     return input['tag'] === 'FieldValidator';
 }
 
-type ValidationModel<T> = {
-    [P in keyof T]?:   T[P] extends primitive ? FieldValidator | IValidator<T> | Array<FieldValidator | IValidator<T>>
-                     : T[P] extends Array<infer U> ? FieldValidator | IValidator<T> | Array<FieldValidator | IValidator<T>>
-                     : IGenericValidator<T> | Array<IGenericValidator<T>>;
+export type ValidationModel<T, Ctx> = {
+    [P in keyof T]?:   T[P] extends primitive ? FieldValidator | IValidator<T, Ctx> | Array<FieldValidator | IValidator<T, Ctx>>
+                     : T[P] extends Array<infer U> ? FieldValidator | IValidator<T, Ctx> | Array<FieldValidator | IValidator<T, Ctx>>
+                     : IGenericValidator<T, Ctx> | Array<IGenericValidator<T, Ctx>>;
 }
 
-type ValidatorEntryProps<T> = {
-    [P in keyof T]?: Array<FieldValidator | IValidator<T>>;
-}
-
-function getValidatorsFor<T>(klass: new (...args: any[]) => T) : ValidatorEntryProps<T> {
-    return Reflect.getMetadata(VALIDATION_METADATA_KEY, klass) as ValidatorEntryProps<T> || {};
+type ValidatorEntryProps<T, Ctx> = {
+    [P in keyof T]?: Array<FieldValidator | IValidator<T, Ctx>>;
 }
 
 type RequiredProps<T> = {
     [P in keyof T]: boolean;
-}
-
-export function getRequiredFieldsFor<T>(klass: new (...args: any[]) => T) : RequiredProps<T> {
-    const classValidators = getValidatorsFor(klass);
-    var res: any = {};
-    for(var p in classValidators) {
-        var required = false;
-        var validators = classValidators[p];
-        if(validators !== undefined){
-            validators.forEach(v => {
-                if(isRequiredFieldValidator(v)){
-                    required = true;
-                }
-            })
-        }
-        
-        res[p] = required;
-    }
-
-    return res;
 }
 
 class RequiredValidator extends FieldValidator {
@@ -161,32 +135,236 @@ export const required = (message: string = 'is required') => new RequiredValidat
 export const min = (min: number, message: string | null = null) => new MinLengthValidator(min, message);
 export const max = (max: number, message: string | null = null) => new MaxLengthValidator(max, message);
 
-export function register<T>(
-    klass: new (...args: any[]) => T,
-    map: ValidationModel<T>
-): void  {
-    const currentMap: any = getValidatorsFor<T>(klass);
-    for(const prop in map) {
-        const currentValidators = (currentMap[prop] || []) as Array<FieldValidator | IValidator<T> | IGenericValidator<T>>;
-        const mapped = map[prop];
-        if(mapped instanceof Array){
-            let m = mapped as any[];
-            m.forEach(m => {
-                currentValidators.push(m);
-            });
-        }
-        else {
-            currentValidators.push(mapped as any);
-        }
-
-        currentMap[prop] = currentValidators;
-    }
-
-    Reflect.defineMetadata(VALIDATION_METADATA_KEY, currentMap, klass);
-}
-
 type ValidationArray<T> = Array<T> & {
     errors: string[]
+}
+
+export interface IValidationRegistry<Ctx> {
+    register<T>(
+        klass: new (...args: any[]) => T,
+        map: ValidationModel<T, Ctx>
+    ): void
+
+    validate<T extends tdc.ITyped<any>>(
+        model: T, 
+        ctx: Ctx,
+        originalModel?: T | undefined,
+        validationPath?: string | null, 
+        path?: string
+        ): Promise<ValidationResult<T>>
+
+    getRequiredFieldsFor<T>(klass: new (...args: any[]) => T) : RequiredProps<T>
+}
+
+export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
+    public readonly map: Map<any, any> = new Map();
+
+    getValidatorsFor<T>(klass: new (...args: any[]) => T) : ValidatorEntryProps<T, Ctx> {
+        return this.map.get(klass) as ValidatorEntryProps<T, Ctx> || {};
+    }
+
+    public register<T>(
+        klass: new (...args: any[]) => T,
+        map: ValidationModel<T, Ctx>
+    ): void  {
+        const currentMap: any = this.getValidatorsFor<T>(klass);
+        for(const prop in map) {
+            const currentValidators = (currentMap[prop] || []) as Array<FieldValidator | IValidator<T, Ctx> | IGenericValidator<T, Ctx>>;
+            const mapped = map[prop];
+            if(mapped instanceof Array){
+                let m = mapped as any[];
+                m.forEach(m => {
+                    currentValidators.push(m);
+                });
+            }
+            else {
+                currentValidators.push(mapped as any);
+            }
+    
+            currentMap[prop] = currentValidators;
+        }
+
+        this.map.set(klass, currentMap);
+    }
+
+    public async validate<T extends tdc.ITyped<any>>(
+        model: T, 
+        ctx: Ctx,
+        originalModel: T | undefined = undefined, 
+        validationPath: string | null = null, 
+        path: string = '.'
+    ): Promise<ValidationResult<T>> {
+    
+        const result: any = {};
+        if(isPrimitive(model)){
+            return result;
+        }
+    
+        var target = model as any;
+        target = target.prototype === undefined ? target.constructor : target;
+        
+        function add(key: string, res: string | null | GenericValidatorResult<T>){
+            if(isRecord(res)){
+                const r = res as any;
+                for(var k in r){
+                    add(k, r[k]);
+                }
+                return;
+            }
+    
+            var current = result[key] || [];
+            if(res !== null && current.indexOf(res) === -1){
+                current.push(res);
+            }
+            
+            result[key] = current;
+        };
+    
+        const addToArray = (key: string, res: string | null | GenericValidatorResult<T>) => {
+            if(res === null)
+                return;
+    
+            function innerAdd(key: string, res: string | null) {
+                var current: any = result[key] || [];
+                if(!current.errors)
+                {
+                    current.errors = [];
+                }
+    
+                if(res !== null && current.indexOf(res) === -1){
+                    current.errors.push(res);
+                }
+                
+                result[key] = current;
+            }
+    
+            if(isRecord(res)) {
+                const r = res as any;
+                for(var k in r){
+                    if(k === key){
+                        innerAdd(key, r);
+                        return;
+                    }
+    
+                    const isArray = Array.isArray((model as any)[k]);
+                    if(isArray){
+                        addToArray(k, r[k]);
+                    }
+                    add(k, r[k]);
+                }
+                return;
+            }
+            
+            innerAdd(key, res as any);
+        };
+    
+        const validators = this.getValidatorsFor<T>(target);
+    
+        for(const key in validators){
+            if(!isInValidationPath(path + key, validationPath))
+            {
+                continue;
+            }
+            const propValue = (model as any)[key];
+            const isArray = propValue instanceof Array;
+            const propValidators = validators[key] as Array<FieldValidator | IValidator<T, Ctx>>;
+            for(var i = 0; i < propValidators.length; i++){
+                const v = propValidators[i];
+                var res = isFieldValidator(v) ? v.validate(propValue) : v(model, ctx, originalModel);
+                if(res instanceof Promise){
+                    res = await res;
+                }
+                if(isArray){
+                    addToArray(key, res);
+                }
+                else if(isPrimitive(propValue)) {
+                    add(key, res);
+                }
+                else if(isTypedRecord(res) || isRecord(res)) {
+                    add(key, res);
+                }
+            }
+        }
+    
+        if(!model.getType) {
+            return result;
+        }
+    
+        const type = model.getType();
+        const propKeys = Object.keys(type.props);
+        for(var i = 0; i < propKeys.length; i++){
+            const key = propKeys[i];
+            if(!isInValidationPath(path + key, validationPath)) {
+                continue;
+            }
+            const prop = type.props[key] as t.Type<any>;
+            const tag = (prop as any)['_tag'];
+            const tagContains = (search: string) => tag && tag.length > 0 ? tag.indexOf(search) != -1 : false;
+            const propValue = (model as any)[key];
+            const originalValue = hasKey(originalModel, key) ? (originalModel as any)[key] : undefined;
+            const current = result[key];
+            
+            if(tag === "InterfaceType" || isTypedRecord(propValue)){
+                const innerResult = await this.validate(propValue, ctx, originalValue, validationPath, path + key + '.');
+                
+                if(current){
+                    if(Object.keys(innerResult).length > 0){
+                        result[key] = Object.assign(current, innerResult);
+                    }
+                }
+                else {
+                    result[key] = innerResult;
+                }
+            }
+            else if(tagContains("ArrayType"))
+            {
+                var arrayRes: any = result[key] || [];
+                for(var k = 0; k < propValue.length; k++){
+                    const item = propValue[k];
+                    const originalItem = originalValue !== undefined && originalValue.length > k ? originalValue[k] : undefined;
+                    const innerResult = await this.validate(item, ctx, originalItem, validationPath, path + key + '[' + k + ']' + '.');
+                    arrayRes.push(innerResult);
+                }
+                
+                if(!arrayRes.errors){
+                    arrayRes.errors = [];
+                };
+                result[key] = arrayRes;
+            }
+            else {
+                if(!current){
+                    result[key] = [];
+                }
+                
+                let decodeResult = prop.decode(propValue);
+                if(decodeResult.isLeft()){
+                    PathReporter.report(decodeResult).forEach(o => add(key, o));
+                }
+            }
+        }
+    
+        return result;
+    }
+
+    public getRequiredFieldsFor<T>(klass: new (...args: any[]) => T) : RequiredProps<T> {
+        const classValidators = this.getValidatorsFor<T>(klass);
+        var res: any = {};
+        for(var p in classValidators) {
+            var required = false;
+            var validators = classValidators[p];
+            if(validators !== undefined){
+                validators.forEach(v => {
+                    if(isRequiredFieldValidator(v)){
+                        required = true;
+                    }
+                })
+            }
+            
+            res[p] = required;
+        }
+    
+        return res;
+    }
 }
 
 export function isValidationArray<T>(input: any): input is ValidationArray<T> {
@@ -288,162 +466,4 @@ function isRecord(input: any): boolean {
     }
 
     return false;
-}
-
-export async function validate<T extends tdc.ITyped<any>>(
-    model: T, 
-    originalModel: T | undefined = undefined, 
-    validationPath: string | null = null, 
-    path: string = '.'
-    ): Promise<ValidationResult<T>> {
-
-    const result: any = {};
-    if(isPrimitive(model)){
-        return result;
-    }
-
-    var target = model as any;
-    target = target.prototype === undefined ? target.constructor : target;
-    
-    function add(key: string, res: string | null | GenericValidatorResult<T>){
-        if(isRecord(res)){
-            const r = res as any;
-            for(var k in r){
-                add(k, r[k]);
-            }
-            return;
-        }
-
-        var current = result[key] || [];
-        if(res !== null && current.indexOf(res) === -1){
-            current.push(res);
-        }
-        
-        result[key] = current;
-    };
-
-    const addToArray = (key: string, res: string | null | GenericValidatorResult<T>) => {
-        if(res === null)
-            return;
-
-        function innerAdd(key: string, res: string | null) {
-            var current: any = result[key] || [];
-            if(!current.errors)
-            {
-                current.errors = [];
-            }
-
-            if(res !== null && current.indexOf(res) === -1){
-                current.errors.push(res);
-            }
-            
-            result[key] = current;
-        }
-
-        if(isRecord(res)) {
-            const r = res as any;
-            for(var k in r){
-                if(k === key){
-                    innerAdd(key, r);
-                    return;
-                }
-
-                const isArray = Array.isArray((model as any)[k]);
-                if(isArray){
-                    addToArray(k, r[k]);
-                }
-                add(k, r[k]);
-            }
-            return;
-        }
-        
-        innerAdd(key, res as any);
-    };
-
-    const validators = getValidatorsFor<T>(target);
-
-    for(const key in validators){
-        if(!isInValidationPath(path + key, validationPath))
-        {
-            continue;
-        }
-        const propValue = model[key];
-        const isArray = propValue instanceof Array;
-        const propValidators = validators[key] as Array<FieldValidator | IValidator<T>>;
-        for(var i = 0; i < propValidators.length; i++){
-            const v = propValidators[i];
-            var res = isFieldValidator(v) ? v.validate(propValue) : v(model, originalModel);
-            if(res instanceof Promise){
-                res = await res;
-            }
-            if(isArray){
-                addToArray(key, res);
-            }
-            else if(isPrimitive(propValue)) {
-                add(key, res);
-            }
-            else if(isTypedRecord(res) || isRecord(res)) {
-                add(key, res);
-            }
-        }
-    }
-
-    if(!model.getType) {
-        return result;
-    }
-
-    const type = model.getType();
-    const propKeys = Object.keys(type.props);
-    for(var i = 0; i < propKeys.length; i++){
-        const key = propKeys[i];
-        if(!isInValidationPath(path + key, validationPath)) {
-            continue;
-        }
-        const prop = type.props[key] as t.Type<any>;
-        const tag = (prop as any)['_tag'];
-        const tagContains = (search: string) => tag && tag.length > 0 ? tag.indexOf(search) != -1 : false;
-        const propValue = (model as any)[key];
-        const originalValue = hasKey(originalModel, key) ? (originalModel as any)[key] : undefined;
-        const current = result[key];
-        
-        if(tag === "InterfaceType" || isTypedRecord(propValue)){
-            const innerResult = await validate(propValue, originalValue, validationPath, path + key + '.');
-            
-            if(current){
-                if(Object.keys(innerResult).length > 0){
-                    result[key] = Object.assign(current, innerResult);
-                }
-            }
-            else {
-                result[key] = innerResult;
-            }
-        }
-        else if(tagContains("ArrayType"))
-        {
-            var arrayRes: any = result[key] || [];
-            for(var k = 0; k < propValue.length; k++){
-                const item = propValue[k];
-                const originalItem = originalValue !== undefined && originalValue.length > k ? originalValue[k] : undefined;
-                const innerResult = await validate(item, originalItem, validationPath, path + key + '[' + k + ']' + '.');
-                arrayRes.push(innerResult);
-            }
-            
-            if(!arrayRes.errors){
-                arrayRes.errors = [];
-            };
-            result[key] = arrayRes;
-        }
-        else {
-            if(!current){
-                result[key] = [];
-            }
-            
-            let decodeResult = prop.decode(propValue);
-            if(decodeResult.isLeft()){
-                PathReporter.report(decodeResult).forEach(o => add(key, o));
-            }
-        }
-    }
-
-    return result;
 }
