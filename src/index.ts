@@ -242,7 +242,7 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                 const r = res as any;
                 for(var k in r){
                     if(k === key){
-                        innerAdd(key, r);
+                        innerAdd(key, r[k]);
                         return;
                     }
     
@@ -266,7 +266,7 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                 continue;
             }
             const propValue = (model as any)[key];
-            const isArray = propValue instanceof Array;
+            const isArray = Array.isArray(propValue);
             const propValidators = validators[key] as Array<FieldValidator | IValidator<T, Ctx>>;
             for(var i = 0; i < propValidators.length; i++){
                 const v = propValidators[i];
