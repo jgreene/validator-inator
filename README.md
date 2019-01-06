@@ -8,7 +8,7 @@ Getting Started
 
 Examples
 
-Play with the below example [here](https://codesandbox.io/s/2okj5981jy)
+Play with the below example here: [![Edit j4q8y0onz5](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/s/j4q8y0onz5)
 
 
 ```ts
