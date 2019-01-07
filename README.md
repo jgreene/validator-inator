@@ -39,12 +39,12 @@ Play with the below example here: [![Edit j4q8y0onz5](https://codesandbox.io/sta
     class Person extends tdc.DeriveClass(PersonType) {}
 
     const mustHaveContactMethodValidator = (p: Person) => {
-    const validResult = { Email: null, Phone: null, Addresses: null };
-    if (p.Email !== null || p.Phone !== null || p.Addresses.length > 0) {
-        return validResult;
-    }
+        const validResult = { Email: null, Phone: null, Addresses: null };
+        if (p.Email !== null || p.Phone !== null || p.Addresses.length > 0) {
+            return validResult;
+        }
 
-    const message =
+        const message =
         "A person must have an Email or a Phone or a Physical Address!";
 
         return { Email: message, Phone: message, Addresses: message };
