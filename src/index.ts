@@ -204,6 +204,12 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
         target = target.prototype === undefined ? target.constructor : target;
         
         function add(key: string, res: string | null | GenericValidatorResult<T>){
+            const keyIsArray = Array.isArray((model as any)[key]);
+            if(keyIsArray) {
+                addToArray(key, res)
+                return;
+            }
+
             if(isRecord(res)){
                 const r = res as any;
                 for(var k in r){
@@ -220,7 +226,7 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
             result[key] = current;
         };
     
-        const addToArray = (key: string, res: string | null | GenericValidatorResult<T>) => {
+        function addToArray(key: string, res: string | null | GenericValidatorResult<T>) {
             if(res === null)
                 return;
     
@@ -230,32 +236,44 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                 {
                     current.errors = [];
                 }
+
+                result[key] = current;
+
+                if(res === null){
+                    return;
+                }
+
+                if(typeof res !== 'string'){
+                    throw new Error('Not a valid error string!')
+                }
     
-                if(res !== null && current.indexOf(res) === -1){
+                if(current.errors.indexOf(res) === -1){
                     current.errors.push(res);
                 }
-                
-                result[key] = current;
+            }
+
+            if(typeof res === 'string'){
+                innerAdd(key, res);
+                return;
             }
     
             if(isRecord(res)) {
                 const r = res as any;
                 for(var k in r){
-                    if(k === key){
-                        innerAdd(key, r[k]);
-                        return;
-                    }
-    
                     const isArray = Array.isArray((model as any)[k]);
                     if(isArray){
                         addToArray(k, r[k]);
                     }
-                    add(k, r[k]);
+                    else if(k === key){
+                        innerAdd(k, r[k]);
+                        return;
+                    }
+                    else {
+                        add(k, r[k]);
+                    }
                 }
                 return;
             }
-            
-            innerAdd(key, res as any);
         };
     
         const validators = this.getValidatorsFor<T>(target);
@@ -266,7 +284,6 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                 continue;
             }
             const propValue = (model as any)[key];
-            const isArray = Array.isArray(propValue);
             const propValidators = validators[key] as Array<FieldValidator | IValidator<T, Ctx>>;
             for(var i = 0; i < propValidators.length; i++){
                 const v = propValidators[i];
@@ -274,15 +291,8 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                 if(res instanceof Promise){
                     res = await res;
                 }
-                if(isArray){
-                    addToArray(key, res);
-                }
-                else if(isPrimitive(propValue)) {
-                    add(key, res);
-                }
-                else if(isTypedRecord(res) || isRecord(res)) {
-                    add(key, res);
-                }
+
+                add(key, res);
             }
         }
     
@@ -451,7 +461,7 @@ function isTypedRecord(input: any): boolean {
     return false;
 }
 
-function isRecord(input: any): boolean {
+function isRecord(input: any): input is object {
     if(isPrimitive(input)){
         return false;
     }
