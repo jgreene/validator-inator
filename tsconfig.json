@@ -16,5 +16,5 @@
     "forceConsistentCasingInFileNames": true,
     "lib": ["es6", "dom"]
   },
-  "include": ["./src/index.ts"]
+  "include": ["./src/**/*.ts"]
 }

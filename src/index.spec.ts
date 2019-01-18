@@ -8,7 +8,7 @@ import { PathReporter } from 'io-ts/lib/PathReporter'
 
 (moment as any).suppressDeprecationWarnings = true;
 
-import { ValidationRegistry, ValidationModel, isValid, required, isValidationArray } from './index'
+import { ValidationRegistry, ValidationModel, isValid, required, min, max, isValidationArray } from './index'
 
 type TestValidationContext = {
     isTest: boolean
@@ -343,5 +343,71 @@ describe('Can validate Person', () => {
 
         expect(result).has.property('FirstName');
         expect(result.FirstName.length).eq(0);
+    })
+
+    it('RequiredValidator validates correctly', async () => {
+        const errorMessage = 'is required!'
+        expect(required(errorMessage).validate(null)).eq(errorMessage)
+        expect(required(errorMessage).validate(undefined)).eq(errorMessage)
+        expect(required(errorMessage).validate('')).eq(errorMessage)
+        expect(required(errorMessage).validate([])).eq(errorMessage)
+
+        expect(required(errorMessage).validate('a')).is.null
+        expect(required(errorMessage).validate('test')).is.null
+        expect(required(errorMessage).validate(1)).is.null
+        expect(required(errorMessage).validate(false)).is.null
+        expect(required(errorMessage).validate(true)).is.null
+
+        expect(required().validate(null)).eq('is required')
+    })
+
+    it('MinValidator validates correctly', async () => {
+        const errorMessage = 'must be at least 5'
+        const validator = min(5, errorMessage)
+
+        expect(validator.validate(null)).is.null
+        expect(validator.validate(undefined)).is.null
+        
+        expect(validator.validate('')).eq(errorMessage)
+        expect(validator.validate('aaaa')).eq(errorMessage)
+        expect(validator.validate('aaaaa')).is.null
+        expect(validator.validate(5)).is.null
+        expect(validator.validate(4)).eq(errorMessage)
+        expect(validator.validate([])).eq(errorMessage)
+        expect(validator.validate([1,2,3,4,5])).is.null
+
+        expect(min(5).validate('aaaa')).eq('must be at least 5 characters')
+        expect(min(5).validate([1,2,3,4])).eq('must have at least 5 entries')
+        expect(min(5).validate({ length: 4 })).is.null
+        expect(min(5).validate({ length: 6 })).is.null
+        expect(min(5).validate(4)).eq('must be greater than 4')
+    })
+
+    it('MaxValidator validates correctly', async () => {
+        const errorMessage = 'may only be less than or equal to 5'
+        const validator = max(5, errorMessage)
+
+        expect(validator.validate(null)).is.null
+        expect(validator.validate(undefined)).is.null
+        
+        expect(validator.validate('')).is.null
+        expect(validator.validate('aaaa')).is.null
+        expect(validator.validate('aaaaa')).is.null
+        expect(validator.validate('aaaaaa')).eq(errorMessage)
+        expect(validator.validate(5)).is.null
+        expect(validator.validate(4)).is.null
+        expect(validator.validate(6)).eq(errorMessage)
+        expect(validator.validate([])).is.null
+        expect(validator.validate([1,2,3,4])).is.null
+        expect(validator.validate([1,2,3,4,5])).is.null
+        expect(validator.validate([1,2,3,4,5,6])).eq(errorMessage)
+
+        expect(max(5).validate('aaaaaa')).eq('must be fewer than 6 characters')
+        expect(max(5).validate([1,2,3,4,5,6])).eq('must be fewer than 6 entries')
+
+        expect(max(5).validate({ length: 6 })).is.null
+        expect(max(5).validate({ length: 4 })).is.null
+
+        expect(max(5).validate(6)).eq('must be less than 6')
     })
 });

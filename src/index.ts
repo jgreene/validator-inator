@@ -67,8 +67,8 @@ class RequiredValidator extends FieldValidator {
             return this.message;
         }
 
-        if(typeof value === "string" && value.length < 1){
-            return this.message;
+        if(value.length < 1) {
+            return this.message
         }
 
         return null;
@@ -79,7 +79,7 @@ function isRequiredFieldValidator(input: any): input is RequiredValidator {
     return input && input.isRequiredFieldValidator === true
 }
 
-class MinLengthValidator extends FieldValidator {
+class MinValidator extends FieldValidator {
     constructor(public min: number, public message: string | null = null){
         super();
     }
@@ -89,23 +89,30 @@ class MinLengthValidator extends FieldValidator {
             return null;
         }
 
-        if(typeof value === "string"){
-            if(value.length < this.min) {
-                return this.message || 'must be at least ' + this.min + ' characters';
+        if(value.length < this.min) {
+
+            if(this.message) {
+                return this.message
+            }
+
+            if(typeof value === 'string'){
+                return 'must be at least ' + this.min + ' characters';
+            }
+
+            if(Array.isArray(value)){
+                return 'must have at least ' + this.min + ' entries';
             }
         }
 
-        if(typeof value === "number"){
-            if(value < this.min){
-                return this.message || 'must be greater than ' + this.min;
-            }
+        if(value < this.min){
+            return this.message || 'must be greater than ' + (this.min - 1);
         }
 
         return null;
     }
 }
 
-class MaxLengthValidator extends FieldValidator {
+class MaxValidator extends FieldValidator {
     constructor(public max: number, public message: string | null = null){
         super();
     }
@@ -115,16 +122,22 @@ class MaxLengthValidator extends FieldValidator {
             return null;
         }
 
-        if(typeof value === "string"){
-            if(value.length > this.max) {
-                return this.message || 'must be fewer than ' + this.max + ' characters';
+        if(value.length > this.max) {
+            if(this.message){
+                return this.message;
+            }
+            
+            if(typeof value === 'string'){
+                return 'must be fewer than ' + (this.max + 1) + ' characters';
+            }
+
+            if(Array.isArray(value)){
+                return 'must be fewer than ' + (this.max + 1) + ' entries';
             }
         }
 
-        if(typeof value === "number"){
-            if(value < this.max){
-                return this.message || 'must be less than ' + this.max;
-            }
+        if(value > this.max){
+            return this.message || 'must be less than ' + (this.max + 1);
         }
 
         return null;
@@ -132,8 +145,8 @@ class MaxLengthValidator extends FieldValidator {
 }
 
 export const required = (message: string = 'is required') => new RequiredValidator(message);
-export const min = (min: number, message: string | null = null) => new MinLengthValidator(min, message);
-export const max = (max: number, message: string | null = null) => new MaxLengthValidator(max, message);
+export const min = (min: number, message: string | null = null) => new MinValidator(min, message);
+export const max = (max: number, message: string | null = null) => new MaxValidator(max, message);
 
 type ValidationArray<T> = Array<T> & {
     errors: string[]
@@ -432,17 +445,13 @@ export function isValid<T>(result: ValidationResult<T>): boolean {
     return res;
 }
 
-function hasKey(input: any, key: string) {
+function hasKey(input: any, key: string): boolean {
     if(isPrimitive(input))
     {
         return false;
     }
 
-    if(key in input){
-        return true;
-    }
-
-    return false;
+    return key in input;
 }
 
 function isTypedRecord(input: any): boolean {
@@ -476,4 +485,12 @@ function isRecord(input: any): input is object {
     }
 
     return false;
+}
+
+export const _privates = {
+    isPrimitive,
+    isInValidationPath,
+    hasKey,
+    isTypedRecord,
+    isRecord
 }
