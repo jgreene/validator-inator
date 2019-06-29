@@ -3,10 +3,7 @@ import 'mocha';
 
 import * as m from 'io-ts-derive-class';
 import * as t from 'io-ts';
-import * as moment from 'moment';
 import { PathReporter } from 'io-ts/lib/PathReporter'
-
-(moment as any).suppressDeprecationWarnings = true;
 
 import { ValidationRegistry, ValidationModel, isValid, required, min, max, isValidationArray } from './index'
 
@@ -238,8 +235,8 @@ describe('Can validate Person', () => {
         expect(result.Birthdate.length).eq(0);
     });
 
-    it('Can validate moment or null', async () => {
-        let bd: any = moment('0002-01-12T05:50:36.000Z');
+    it('Can validate Date or null', async () => {
+        let bd: any = '0002-01-12T05:50:36.000Z';
 
         let decodeResult = DateTimeOrNullType.decode(bd);
         expect(decodeResult.isLeft()).eq(false);

@@ -4,9 +4,8 @@ import 'reflect-metadata'
 import * as t from 'io-ts'
 import * as tdc from 'io-ts-derive-class'
 import { PathReporter } from 'io-ts/lib/PathReporter'
-import * as moment from 'moment';
 
-type primitive = string | number | boolean | null | undefined | moment.Moment;
+type primitive = string | number | boolean | null | undefined | Date;
 
 function isPrimitive(input: any): input is primitive {
     return typeof input === "string"
@@ -14,7 +13,7 @@ function isPrimitive(input: any): input is primitive {
         || typeof input === "number"
         || input === null
         || input === undefined
-        || moment.isMoment(input);
+        || input instanceof Date
 }
 
 type ValidatorResult = string | null | Promise<string | null>;
@@ -341,8 +340,8 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
             }
             else if(tagContains("ArrayType"))
             {
-                var arrayRes: any = result[key] || [];
-                for(var k = 0; k < propValue.length; k++){
+                const arrayRes: any = result[key] || [];
+                for(let k = 0; k < propValue.length; k++){
                     const item = propValue[k];
                     const originalItem = originalValue !== undefined && originalValue.length > k ? originalValue[k] : undefined;
                     const innerResult = await this.validate(item, ctx, originalItem, validationPath, path + key + '[' + k + ']' + '.');
@@ -359,9 +358,9 @@ export class ValidationRegistry<Ctx> implements IValidationRegistry<Ctx> {
                     result[key] = [];
                 }
                 
-                let decodeResult = prop.decode(propValue);
+                const decodeResult = prop.decode(propValue);
                 if(decodeResult.isLeft()){
-                    PathReporter.report(decodeResult).forEach(o => add(key, o));
+                    PathReporter.report(decodeResult).forEach((o) => add(key, o));
                 }
             }
         }
